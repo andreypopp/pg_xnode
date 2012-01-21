@@ -11,9 +11,13 @@
 #include "xmlnode_util.h"
 
 static void retrieveColumnPaths(XMLScanContext xScanCtx, ArrayType *pathsColArr, int columns);
-static ArrayType *getResultArray(XMLScanContext ctx, XMLNodeOffset baseNodeOff);
+static HeapTuple getResultRow(XMLScanContext ctx, XMLNodeOffset baseNodeOff);
 static xpathval getXPathExprValue(xmldoc document, bool *notNull, XPathExprOperandValue res);
 
+char	   *pathValeTypName = "pathval";
+char	   *schemaName = "xml";
+Oid			schemaOid = InvalidOid;
+Oid			pathValOid = InvalidOid;
 
 /* The order must follow XPathValueType */
 char	   *xpathValueTypes[] = {"bool", "number", "string", "nodeset"};
@@ -291,15 +295,19 @@ xpath_single(PG_FUNCTION_ARGS)
 }
 
 
-PG_FUNCTION_INFO_V1(xpath_array);
+PG_FUNCTION_INFO_V1(xpath_table);
 
+/*
+ * TODO
+ * Cleanup, remove unnecessary variables if there are any.
+ */
 /*
  * TODO Check if it's safe to store pointers to elements of
  * PG_GETARG_POINTER(2) across calls or if the parameter should be copied to
  * the 'fctx';
  */
 Datum
-xpath_array(PG_FUNCTION_ARGS)
+xpath_table(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *fctx;
 	XMLScan		baseScan;
@@ -321,13 +329,15 @@ xpath_array(PG_FUNCTION_ARGS)
 		xmldoc		doc = (xmldoc) PG_GETARG_VARLENA_P(2);
 		XMLCompNodeHdr docRoot = (XMLCompNodeHdr) XNODE_ROOT(doc);
 		MemoryContext oldcontext;
+		TypeFuncClass tfc;
 
 		xpathBase = getSingleXPath(exprBase, xpHdrBase);
 
 		fctx = SRF_FIRSTCALL_INIT();
-		if (get_call_result_type(fcinfo, &resultType, NULL) != TYPEFUNC_SCALAR)
+
+		if ((tfc = get_call_result_type(fcinfo, &resultType, NULL)) != TYPEFUNC_RECORD)
 		{
-			elog(ERROR, "function called in a context that doesn't accept scalar.");
+			elog(ERROR, "function called in incorrect context: %u.", tfc);
 		}
 		oldcontext = MemoryContextSwitchTo(fctx->multi_call_memory_ctx);
 
@@ -360,15 +370,42 @@ xpath_array(PG_FUNCTION_ARGS)
 		xScanCtx->colPaths = (xpath *) palloc(xScanCtx->columns * sizeof(xpath));
 		xScanCtx->colResults = NULL;
 		xScanCtx->colResNulls = NULL;
-		xScanCtx->outArrayType = resultType;
+		xScanCtx->resDesc = NULL;
+		retrieveColumnPaths(xScanCtx, pathsColArr, *dimv);
 
 		/*
-		 * Output element OID to be identified later - first time a not null
-		 * value is found for any column xpath.
+		 * As the 'pathval' type is not in catalog, we must find its OID in
+		 * cache. However, this only has to be done when the function is used
+		 * first time by the current backend.
 		 */
-		xScanCtx->outElmType = InvalidOid;
+		if (pathValOid == InvalidOid)
+		{
+			HeapTuple	tup;
 
-		retrieveColumnPaths(xScanCtx, pathsColArr, *dimv);
+			tup = SearchSysCache1(NAMESPACENAME, CStringGetDatum(schemaName));
+			Assert(HeapTupleIsValid(tup));
+			schemaOid = HeapTupleGetOid(tup);
+			ReleaseSysCache(tup);
+
+			tup = SearchSysCache2(TYPENAMENSP, CStringGetDatum(pathValeTypName),
+								  ObjectIdGetDatum(schemaOid));
+			Assert(HeapTupleIsValid(tup));
+			pathValOid = HeapTupleGetOid(tup);
+			ReleaseSysCache(tup);
+		}
+
+		xScanCtx->outType = pathValOid;
+
+		{
+			unsigned int i;
+
+			xScanCtx->resDesc = CreateTemplateTupleDesc(xScanCtx->columns, false);
+			for (i = 0; i < xScanCtx->columns; i++)
+			{
+				TupleDescInitEntry(xScanCtx->resDesc, i + 1, "pathval", xScanCtx->outType, -1, 0);
+			}
+			fctx->attinmeta = TupleDescGetAttInMetadata(xScanCtx->resDesc);
+		}
 
 		fctx->user_fctx = xScanCtx;
 		MemoryContextSwitchTo(oldcontext);
@@ -379,13 +416,13 @@ xpath_array(PG_FUNCTION_ARGS)
 
 	if (baseScan->xpath->targNdKind == XMLNODE_DOC && !baseScan->done)
 	{
-		ArrayType  *result = getResultArray(xScanCtx, XNODE_ROOT_OFFSET(xScanCtx->baseScan->document));
+		HeapTuple	result = getResultRow(xScanCtx, XNODE_ROOT_OFFSET(xScanCtx->baseScan->document));
 
 		baseScan->done = true;
 
 		if (result != NULL)
 		{
-			SRF_RETURN_NEXT(fctx, PointerGetDatum(result));
+			SRF_RETURN_NEXT(fctx, HeapTupleGetDatum(result));
 		}
 	}
 	if (!baseScan->done)
@@ -394,11 +431,11 @@ xpath_array(PG_FUNCTION_ARGS)
 		if (baseNode != NULL)
 		{
 			XMLNodeOffset baseNdOff = (char *) baseNode - VARDATA(xScanCtx->baseScan->document);
-			ArrayType  *result = getResultArray(xScanCtx, baseNdOff);
+			HeapTuple	result = getResultRow(xScanCtx, baseNdOff);
 
 			if (result != NULL)
 			{
-				SRF_RETURN_NEXT(fctx, PointerGetDatum(result));
+				SRF_RETURN_NEXT(fctx, HeapTupleGetDatum(result));
 			}
 			else
 			{
@@ -416,13 +453,20 @@ xpath_array(PG_FUNCTION_ARGS)
 		pfree(baseScan);
 
 		pfree(xScanCtx->colPaths);
+
 		if (xScanCtx->colResults != NULL)
 		{
 			pfree(xScanCtx->colResults);
 		}
+
 		if (xScanCtx->colResNulls != NULL)
 		{
 			pfree(xScanCtx->colResNulls);
+		}
+
+		if (xScanCtx->resDesc != NULL)
+		{
+			pfree(xScanCtx->resDesc);
 		}
 		pfree(xScanCtx);
 		SRF_RETURN_DONE(fctx);
@@ -629,15 +673,15 @@ retrieveColumnPaths(XMLScanContext xScanCtx, ArrayType *pathsColArr, int columns
 }
 
 /*
- * Returns array of nodes where i-th element is result of scan starting at
- * 'baseNodeOff', using 'ctx->colPaths[i]' as XPath expression.
+ * TODO
+ * Cleanup, remove unnecessary variables if there are any.
  */
-static ArrayType *
-getResultArray(XMLScanContext ctx, XMLNodeOffset baseNodeOff)
+static HeapTuple
+getResultRow(XMLScanContext ctx, XMLNodeOffset baseNodeOff)
 {
 	bool		notNull = false;
 	unsigned short int i;
-	ArrayType  *result = NULL;
+	HeapTuple	result = NULL;
 
 	if (ctx->colResults == NULL)
 	{
@@ -669,32 +713,9 @@ getResultArray(XMLScanContext ctx, XMLNodeOffset baseNodeOff)
 
 	if (notNull)
 	{
-		int			dims[1];
-		int			lbs[1];
-
-		if (ctx->outElmType == InvalidOid)
-		{
-			Form_pg_type typeStruct;
-			HeapTuple	typeTup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(ctx->outArrayType));
-
-			Assert(HeapTupleIsValid(typeTup));
-			typeStruct = (Form_pg_type) GETSTRUCT(typeTup);
-			ctx->outElmType = typeStruct->typelem;
-			ReleaseSysCache(typeTup);
-
-			typeTup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(ctx->outElmType));
-			Assert(HeapTupleIsValid(typeTup));
-			typeStruct = (Form_pg_type) GETSTRUCT(typeTup);
-			ctx->outElmLen = typeStruct->typlen;
-			ctx->outElmByVal = typeStruct->typbyval;
-			ctx->outElmalign = typeStruct->typalign;
-			ReleaseSysCache(typeTup);
-		}
-		dims[0] = ctx->columns;
-		lbs[0] = 1;
-		result = construct_md_array(ctx->colResults, ctx->colResNulls, 1, dims, lbs, ctx->outElmType, ctx->outElmLen,
-									ctx->outElmByVal, ctx->outElmalign);
+		result = heap_form_tuple(ctx->resDesc, ctx->colResults, ctx->colResNulls);
 	}
+
 	return result;
 }
 

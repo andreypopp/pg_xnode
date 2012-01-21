@@ -96,7 +96,7 @@ xml.node_kind(xml.node node) returns cstring
    </sect2>
    
    <sect2>
-    <title><literal>xml.path()</literal> - scalar</title>
+    <title><literal>xml.path()</literal></title>
 <synopsis>
 xml.path(xml.path xpath, xml.doc document) returns xml.pathval
 </synopsis>
@@ -110,14 +110,14 @@ xml.path(xml.path xpath, xml.doc document) returns xml.pathval
    </sect2>
    
    <sect2>
-    <title><literal>xml.path()</literal> - vector</title>
+    <title><literal>xml.table()</literal></title>
 <synopsis>
-xml.path(xml.path basePath, xml.path[] columnPaths, xml.doc doc) returns xml.pathval[]
+xml.table(xml.path basePath, xml.path[] columnPaths, xml.doc doc) returns setof record
 </synopsis>
     <para>
      Returns table-like output. For each occurrence of <literal>basePath</literal> in
-     <literal>doc</literal> an array of <literal>xml.pathval</literal> values is returned
-     where n-th element is value of relative XPath expression passed as n-th element of
+     <literal>doc</literal> a record is returned
+     where n-th column is value of relative XPath expression passed as n-th element of
      <literal>columnPaths</literal>. All values of <literal>columnPaths</literal> array
      are relative to <literal>basePath</literal>.
     </para>

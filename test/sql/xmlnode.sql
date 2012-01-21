@@ -93,9 +93,8 @@ order by s.id;
 
 
 -- Convert data to table-like form
-select id, path('/state', '{"region/city", "@area", "@population", "@tld"}', data) as state_info
-from states
-order by id;
+select xml.table('/state', '{"region/city", "@area", "@population", "@tld"}', data) as state_info
+from states;
 
 -- Replace node
 update states set data=add(data, '/state/region[@name="Šumava"]/destination', '<destination name="Boubín"/>', 'r') where id=1;
@@ -472,9 +471,9 @@ select path('/root[contains("", a)]', '<root><a>xy</a><a>z</a></root>');
 select path('/root[contains(b, a)]', '<root><a>xy</a><a>z</a></root>');
 select path('/root[contains(a, b)]', '<root><a>xy</a><a>z</a></root>');
 select path('/root[contains(b, c)]', '<root><a>xy</a><a>z</a></root>');
-select path('/state[contains(@name, "rep") and (@area<=100000 or @population>11000000)]', '{@name, @area, @population}', data) 
-from states
-order by id;
+
+select xml.table('/state[contains(@name, "rep") and (@area<=100000 or @population>11000000)]', '{@name, @area, @population}', data) 
+from states;
 
 select id, path('count(/state/region)', data)
 from states

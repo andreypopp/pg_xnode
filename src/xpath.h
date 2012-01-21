@@ -2,6 +2,8 @@
 #define XPATH_H_
 
 #include "postgres.h"
+#include "access/tupdesc.h"
+#include "nodes/pg_list.h"
 #include "lib/stringinfo.h"
 
 #include "xmlnode.h"
@@ -19,7 +21,7 @@ extern Datum xpath_single(PG_FUNCTION_ARGS);
 
 #define XMLNODE_SET_MAX_COLS	16
 
-extern Datum xpath_array(PG_FUNCTION_ARGS);
+extern Datum xpath_table(PG_FUNCTION_ARGS);
 
 /*
  * The first is minimum amount of memory allocated for binary XPath and also
@@ -478,11 +480,11 @@ typedef struct XMLScanContextData
 	xpath	   *colPaths;
 	Datum	   *colResults;
 	bool	   *colResNulls;
-	Oid			outArrayType,
-				outElmType;
-	int			outElmLen;
-	bool		outElmByVal;
-	char		outElmalign;
+
+	Oid			outType;
+	List	   *outColNames;
+
+	TupleDesc	resDesc;
 }	XMLScanContextData;
 
 typedef struct XMLScanContextData *XMLScanContext;

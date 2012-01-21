@@ -124,13 +124,12 @@ CREATE FUNCTION path(@extschema@.path, doc)
 	VOLATILE
 	STRICT;
 
-CREATE FUNCTION @extschema@.path(@extschema@.path, @extschema@.path[], doc)
-	RETURNS SETOF pathval[] 
-	as 'MODULE_PATHNAME', 'xpath_array'
+CREATE FUNCTION @extschema@.table(@extschema@.path, @extschema@.path[], doc)
+	RETURNS SETOF RECORD 
+	as 'MODULE_PATHNAME', 'xpath_table'
 	LANGUAGE C
 	VOLATILE
 	STRICT;
-
 
 CREATE DOMAIN @extschema@.add_mode AS CHAR(1)
 	NOT NULL

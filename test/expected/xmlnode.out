@@ -134,14 +134,13 @@ order by s.id;
   3 | <region name="Tirol"><city name="Innsbruck" capital="true"/></region><region name="Steiermark"><city name="Graz" capital="true"/></region><region name="Vorarlberg"><city name="Bregenz" capital="true"/></region>
 (3 rows)
 
-select id, path('/state', '{"region/city", "@area", "@population", "@tld"}', data) as state_info
-from states
-order by id;
- id |                                                                                                                                           state_info                                                                                                                                            
-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  1 | {NULL,78866,10674947,cz}
-  2 | {"<city name=\"Stuttgart\" capital=\"true\"/><city name=\"Munchen\" capital=\"true\"/><city name=\"Erfurt\" capital=\"true\"/><city name=\"Potsdam\" capital=\"true\"/><city name=\"Saarbrücken\" capital=\"true\"/><city name=\"Neunkirchen\"/><city name=\"Ottweiler\"/>",357021,81757600,de}
-  3 | {"<city name=\"Innsbruck\" capital=\"true\"/><city name=\"Graz\" capital=\"true\"/><city name=\"Bregenz\" capital=\"true\"/>",83872,8356707,at}
+select xml.table('/state', '{"region/city", "@area", "@population", "@tld"}', data) as state_info
+from states;
+                                                                                                                                           state_info                                                                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (,78866,10674947,cz)
+ ("<city name=""Innsbruck"" capital=""true""/><city name=""Graz"" capital=""true""/><city name=""Bregenz"" capital=""true""/>",83872,8356707,at)
+ ("<city name=""Stuttgart"" capital=""true""/><city name=""Munchen"" capital=""true""/><city name=""Erfurt"" capital=""true""/><city name=""Potsdam"" capital=""true""/><city name=""Saarbrücken"" capital=""true""/><city name=""Neunkirchen""/><city name=""Ottweiler""/>",357021,81757600,de)
 (3 rows)
 
 update states set data=add(data, '/state/region[@name="Šumava"]/destination', '<destination name="Boubín"/>', 'r') where id=1;
@@ -1908,13 +1907,12 @@ select path('/root[contains(b, c)]', '<root><a>xy</a><a>z</a></root>');
  <root><a>xy</a><a>z</a></root>
 (1 row)
 
-select path('/state[contains(@name, "rep") and (@area<=100000 or @population>11000000)]', '{@name, @area, @population}', data) 
-from states
-order by id;
-                      path                      
+select xml.table('/state[contains(@name, "rep") and (@area<=100000 or @population>11000000)]', '{@name, @area, @population}', data) 
+from states;
+                     table                      
 ------------------------------------------------
- {"Česká republika",78866,10674947}
- {"Bundesrepublik Deutschland",357021,81757600}
+ ("Bundesrepublik Deutschland",357021,81757600)
+ ("Česká republika",78866,10674947)
 (2 rows)
 
 select id, path('count(/state/region)', data)
