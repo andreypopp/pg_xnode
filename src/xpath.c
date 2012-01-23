@@ -335,7 +335,8 @@ xpath_table(PG_FUNCTION_ARGS)
 
 		fctx = SRF_FIRSTCALL_INIT();
 
-		if ((tfc = get_call_result_type(fcinfo, &resultType, NULL)) != TYPEFUNC_RECORD)
+		if ((tfc = get_call_result_type(fcinfo, &resultType, NULL)) != TYPEFUNC_RECORD &&
+			tfc != TYPEFUNC_COMPOSITE)
 		{
 			elog(ERROR, "function called in incorrect context: %u.", tfc);
 		}
@@ -370,7 +371,6 @@ xpath_table(PG_FUNCTION_ARGS)
 		xScanCtx->colPaths = (xpath *) palloc(xScanCtx->columns * sizeof(xpath));
 		xScanCtx->colResults = NULL;
 		xScanCtx->colResNulls = NULL;
-		xScanCtx->resDesc = NULL;
 		retrieveColumnPaths(xScanCtx, pathsColArr, *dimv);
 
 		/*
@@ -404,12 +404,12 @@ xpath_table(PG_FUNCTION_ARGS)
 			{
 				TupleDescInitEntry(xScanCtx->resDesc, i + 1, "pathval", xScanCtx->outType, -1, 0);
 			}
-			fctx->attinmeta = TupleDescGetAttInMetadata(xScanCtx->resDesc);
 		}
-
+		fctx->attinmeta = TupleDescGetAttInMetadata(xScanCtx->resDesc);
 		fctx->user_fctx = xScanCtx;
 		MemoryContextSwitchTo(oldcontext);
 	}
+
 	fctx = SRF_PERCALL_SETUP();
 	xScanCtx = (XMLScanContext) fctx->user_fctx;
 	baseScan = xScanCtx->baseScan;
