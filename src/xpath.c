@@ -313,6 +313,7 @@ xpath_table(PG_FUNCTION_ARGS)
 	XMLScan		baseScan;
 	XMLNodeHdr	baseNode;
 	XMLScanContext xScanCtx;
+	unsigned short i;
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -340,6 +341,7 @@ xpath_table(PG_FUNCTION_ARGS)
 		{
 			elog(ERROR, "function called in incorrect context: %u.", tfc);
 		}
+
 		oldcontext = MemoryContextSwitchTo(fctx->multi_call_memory_ctx);
 
 		if (ARR_NDIM(pathsColArr) != 1)
@@ -369,8 +371,6 @@ xpath_table(PG_FUNCTION_ARGS)
 
 		xScanCtx->columns = *dimv;
 		xScanCtx->colPaths = (xpath *) palloc(xScanCtx->columns * sizeof(xpath));
-		xScanCtx->colResults = NULL;
-		xScanCtx->colResNulls = NULL;
 		retrieveColumnPaths(xScanCtx, pathsColArr, *dimv);
 
 		/*
@@ -396,14 +396,10 @@ xpath_table(PG_FUNCTION_ARGS)
 
 		xScanCtx->outType = pathValOid;
 
+		xScanCtx->resDesc = CreateTemplateTupleDesc(xScanCtx->columns, false);
+		for (i = 0; i < xScanCtx->columns; i++)
 		{
-			unsigned int i;
-
-			xScanCtx->resDesc = CreateTemplateTupleDesc(xScanCtx->columns, false);
-			for (i = 0; i < xScanCtx->columns; i++)
-			{
-				TupleDescInitEntry(xScanCtx->resDesc, i + 1, "pathval", xScanCtx->outType, -1, 0);
-			}
+			TupleDescInitEntry(xScanCtx->resDesc, i + 1, "pathval", xScanCtx->outType, -1, 0);
 		}
 		fctx->attinmeta = TupleDescGetAttInMetadata(xScanCtx->resDesc);
 		fctx->user_fctx = xScanCtx;
@@ -411,7 +407,10 @@ xpath_table(PG_FUNCTION_ARGS)
 	}
 
 	fctx = SRF_PERCALL_SETUP();
+
 	xScanCtx = (XMLScanContext) fctx->user_fctx;
+	xScanCtx->colResults = NULL;
+	xScanCtx->colResNulls = NULL;
 	baseScan = xScanCtx->baseScan;
 
 	if (baseScan->xpath->targNdKind == XMLNODE_DOC && !baseScan->done)
@@ -432,7 +431,6 @@ xpath_table(PG_FUNCTION_ARGS)
 		{
 			XMLNodeOffset baseNdOff = (char *) baseNode - VARDATA(xScanCtx->baseScan->document);
 			HeapTuple	result = getResultRow(xScanCtx, baseNdOff);
-
 			if (result != NULL)
 			{
 				SRF_RETURN_NEXT(fctx, HeapTupleGetDatum(result));
@@ -447,6 +445,7 @@ xpath_table(PG_FUNCTION_ARGS)
 			baseScan->done = true;
 		}
 	}
+
 	if (baseScan->done)
 	{
 		finalizeXMLScan(baseScan);
