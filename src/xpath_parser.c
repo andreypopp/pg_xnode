@@ -491,11 +491,12 @@ parseLocationPath(XPath * paths, bool isSubPath, unsigned short *pathCount, char
 			{
 				if (state.elementPos == 0)
 				{
+					xpath = (XPath) state.result;
+					xpath->allAttributes = false;
+
 					if (*state.c == XNODE_CHAR_AT)
 					{
-						xpath = (XPath) state.result;
 						xpath->targNdKind = XMLNODE_ATTRIBUTE;
-						xpath->allAttributes = false;
 						nextChar(&state, false);
 						nameSrcPos++;
 					}
@@ -534,7 +535,7 @@ parseLocationPath(XPath * paths, bool isSubPath, unsigned short *pathCount, char
 								 */
 								ndTestLen++;
 							}
-							xpath = (XPath) state.result;
+
 							switch (nodeType)
 							{
 								case XPATH_NODE_TYPE_COMMENT:
@@ -602,7 +603,6 @@ parseLocationPath(XPath * paths, bool isSubPath, unsigned short *pathCount, char
 						{
 							if (XNODE_VALID_NAME_START(state.c))
 							{
-								xpath = (XPath) state.result;
 								xpath->targNdKind = XMLNODE_ELEMENT;
 								nameLen += state.cWidth;
 								nextChar(&state, true);

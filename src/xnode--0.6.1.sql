@@ -73,6 +73,26 @@ CREATE TYPE @extschema@.path (
 );
 
 
+CREATE FUNCTION branch_in(cstring) RETURNS branch 
+	as 'MODULE_PATHNAME', 'xmlbranch_in'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE FUNCTION branch_out(branch) RETURNS cstring
+	as 'MODULE_PATHNAME', 'xmlbranch_out'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE TYPE branch (
+	internallength = variable,
+	input = branch_in,
+	output = branch_out,
+	alignment = int,
+	storage = plain
+);
+
 CREATE FUNCTION path_debug_print(@extschema@.path) RETURNS text
 	as 'MODULE_PATHNAME', 'xpath_debug_print'
 	LANGUAGE C
