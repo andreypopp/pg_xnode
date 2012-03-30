@@ -6,6 +6,8 @@
 #include "xml_search.h"
 
 static void checkPredicates(XPath locationPath);
+static int	compareBranches(XPathExpression exprLef, XPathExpression exprRight);
+static XPath getLocationPath(XPathExpression xpExpr);
 
 PG_FUNCTION_INFO_V1(xmlbranch_in);
 
@@ -134,6 +136,80 @@ xmlbranch_out(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(output.data);
 }
 
+PG_FUNCTION_INFO_V1(xmlbranch_eq);
+
+Datum
+xmlbranch_eq(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_BOOL(cmpRes == 0);
+}
+
+PG_FUNCTION_INFO_V1(xmlbranch_lt);
+
+Datum
+xmlbranch_lt(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_BOOL(cmpRes < 0);
+}
+
+PG_FUNCTION_INFO_V1(xmlbranch_lte);
+
+Datum
+xmlbranch_lte(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_BOOL(cmpRes <= 0);
+}
+
+PG_FUNCTION_INFO_V1(xmlbranch_gt);
+
+Datum
+xmlbranch_gt(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_BOOL(cmpRes > 0);
+}
+
+
+PG_FUNCTION_INFO_V1(xmlbranch_gte);
+
+Datum
+xmlbranch_gte(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_BOOL(cmpRes >= 0);
+}
+
+
+PG_FUNCTION_INFO_V1(xmlbranch_compare);
+
+Datum
+xmlbranch_compare(PG_FUNCTION_ARGS)
+{
+	XPathExpression exprLeft = (XPathExpression) VARDATA(PG_GETARG_POINTER(0));
+	XPathExpression exprRight = (XPathExpression) VARDATA(PG_GETARG_POINTER(1));
+	int			cmpRes = compareBranches(exprLeft, exprRight);
+
+	PG_RETURN_INT32(cmpRes);
+}
+
 /*
  * Make sure all predicates are 'simple enough' to be comparable with other predicates.
  */
@@ -192,4 +268,149 @@ checkPredicates(XPath locationPath)
 			}
 		}
 	}
+}
+
+/*
+ * Returns positive value if the left branch is greater, negative value if the right is greater
+ * or zero if they are equal.
+ */
+static int
+compareBranches(XPathExpression exprLeft, XPathExpression exprRight)
+{
+	XPath		left = getLocationPath(exprLeft);
+	XPath		right = getLocationPath(exprRight);
+
+	if (left->depth == 0 && right->depth == 0)
+	{
+		return 0;
+	}
+	else if (left->depth == 0 || right->depth == 0)
+	{
+		if (right->depth == 0)
+		{
+			return 1;
+		}
+		else
+		{
+			return -1;
+		}
+	}
+	else
+	{
+		uint8		minLengh = Min(left->depth, right->depth);
+		uint8		i;
+
+		for (i = 1; i <= minLengh; i++)
+		{
+			XPathElement elLeft = (XPathElement) ((char *) left + left->elements[i - 1]);
+			XPathElement elRight = (XPathElement) ((char *) right + right->elements[i - 1]);
+
+			if (i < minLengh)
+			{
+				/* Both must be XML elements. */
+				int			cmpRes = strcmp(elLeft->name, elRight->name);
+
+				if (cmpRes != 0)
+				{
+					return cmpRes;
+					break;
+				}
+				else
+				{
+					/*
+					 * TODO compare predicates if there are some. If only one
+					 * element has predicate, it's greater than the other
+					 * (having no predicate).
+					 */
+					continue;
+				}
+			}
+			else
+			{
+				if (left->depth == right->depth)
+				{
+					/* Checking last element of both paths. */
+					if (left->targNdKind == XMLNODE_ELEMENT && right->targNdKind == XMLNODE_ELEMENT)
+					{
+						return strcmp(elLeft->name, elRight->name);
+					}
+					else
+					{
+						/*
+						 * TODO processing instruction having name test
+						 */
+						if (left->targNdKind == right->targNdKind)
+						{
+							return 0;
+						}
+						else
+						{
+							return (left->targNdKind > right->targNdKind) ? 1 : -1;
+						}
+					}
+				}
+				else
+				{
+					/* At the end of the shorter path. */
+					if (left->depth < right->depth)
+					{
+						Assert(right->targNdKind == XMLNODE_ELEMENT);
+
+						if (left->targNdKind == XMLNODE_ELEMENT)
+						{
+							int			res = strcmp(elLeft->name, elRight->name);
+
+							if (res == 0)
+							{
+								return -1;		/* The right branch does not
+												 * end here. */
+							}
+							else
+							{
+								return res;
+							}
+						}
+						else
+						{
+							return (left->targNdKind > right->targNdKind) ? 1 : -1;
+						}
+					}
+					else
+					{
+						Assert(left->targNdKind == XMLNODE_ELEMENT);
+
+						if (right->targNdKind == XMLNODE_ELEMENT)
+						{
+							int			res = strcmp(elLeft->name, elRight->name);
+
+							if (res == 0)
+							{
+								return 1;		/* The left branch does not
+												 * end here. */
+							}
+							else
+							{
+								return res;
+							}
+						}
+						else
+						{
+							return (left->targNdKind > right->targNdKind) ? 1 : -1;
+						}
+					}
+				}
+			}
+		}
+		elog(ERROR, "unexpected result of branch comparison");
+		return 0;
+	}
+}
+
+static XPath
+getLocationPath(XPathExpression xpExpr)
+{
+	XPathHeader xpHdr = (XPathHeader) ((char *) xpExpr + xpExpr->size);
+	XPath		locPath = (XPath) ((char *) xpHdr + xpHdr->paths[0]);
+
+	return locPath;
 }

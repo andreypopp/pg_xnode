@@ -93,11 +93,74 @@ CREATE TYPE branch (
 	storage = plain
 );
 
+CREATE FUNCTION branch_eq(branch, branch) RETURNS bool 
+	as 'MODULE_PATHNAME', 'xmlbranch_eq'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE FUNCTION branch_lt(branch, branch) RETURNS bool 
+	as 'MODULE_PATHNAME', 'xmlbranch_lt'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE FUNCTION branch_lte(branch, branch) RETURNS bool 
+	as 'MODULE_PATHNAME', 'xmlbranch_lte'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE FUNCTION branch_gt(branch, branch) RETURNS bool 
+	as 'MODULE_PATHNAME', 'xmlbranch_gt'
+	LANGUAGE C
+	IMMUTABLE;
+
+CREATE FUNCTION branch_gte(branch, branch) RETURNS bool 
+	as 'MODULE_PATHNAME', 'xmlbranch_gte'
+	LANGUAGE C
+	IMMUTABLE;
+	
+CREATE FUNCTION branch_compare(branch, branch) RETURNS int4
+	as 'MODULE_PATHNAME', 'xmlbranch_compare'
+	LANGUAGE C
+	IMMUTABLE
+	STRICT;
+
+CREATE OPERATOR = (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_eq);
+CREATE OPERATOR < (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_lt);
+CREATE OPERATOR <= (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_lte);
+CREATE OPERATOR > (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_gt);
+CREATE OPERATOR >= (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_gte);
+
+CREATE OPERATOR FAMILY branch_ops USING btree;
+
+CREATE OPERATOR CLASS branch_ops DEFAULT FOR TYPE branch USING btree FAMILY branch_ops
+	AS
+	OPERATOR 1 < (branch, branch) FOR SEARCH,
+	OPERATOR 2 <= (branch, branch) FOR SEARCH,
+	OPERATOR 3 = (branch, branch) FOR SEARCH,
+	OPERATOR 4 >= (branch, branch) FOR SEARCH,
+	OPERATOR 5 > (branch, branch) FOR SEARCH,
+	FUNCTION 1 branch_compare (branch, branch),
+	STORAGE branch;
+
+CREATE OPERATOR CLASS _branch_ops DEFAULT FOR TYPE branch[] USING gin FAMILY array_ops
+	AS
+	FUNCTION 1 branch_compare (branch, branch),
+	FUNCTION 2 pg_catalog.ginarrayextract (anyarray, internal, internal),
+	FUNCTION 3 ginqueryarrayextract (anyarray, internal, int2, internal, internal, internal, internal),
+	FUNCTION 4 ginarrayconsistent (internal, int2, anyarray, int4, internal, internal, internal, internal),
+	STORAGE branch;
+
+
+
 CREATE FUNCTION path_debug_print(@extschema@.path) RETURNS text
 	as 'MODULE_PATHNAME', 'xpath_debug_print'
 	LANGUAGE C
 	STABLE
 	STRICT;
+
 
 
 CREATE FUNCTION pathval_in(cstring) RETURNS pathval
