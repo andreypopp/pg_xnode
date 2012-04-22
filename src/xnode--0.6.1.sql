@@ -135,6 +135,12 @@ CREATE OPERATOR >= (LEFTARG=branch, RIGHTARG=branch, PROCEDURE=branch_gte);
 
 CREATE OPERATOR FAMILY branch_ops USING btree;
 
+
+-- TODO: Implement support function '2'? Some (btree) op. classes do have it, however
+-- documentation (http://www.postgresql.org/docs/9.1/static/xindex.html) only mentions '1'.
+
+-- Only for '=' it seems to be necessary to be member of the  op. class (non-index array comparison uses the op. class to look for the equality operator).
+-- Nevertheless, the other are included too: 1. It makes the script look better orgainzed, 2. Some other core functionality may look for the other operators in the class too, 3. Various examples (e.g. in 'contrib') include all operators in the class.
 CREATE OPERATOR CLASS branch_ops DEFAULT FOR TYPE branch USING btree FAMILY branch_ops
 	AS
 	OPERATOR 1 < (branch, branch) FOR SEARCH,
@@ -148,6 +154,8 @@ CREATE OPERATOR CLASS branch_ops DEFAULT FOR TYPE branch USING btree FAMILY bran
 CREATE OPERATOR CLASS _branch_ops DEFAULT FOR TYPE branch[] USING gin FAMILY array_ops
 	AS
 	FUNCTION 1 branch_compare (branch, branch),
+-- Support funcitons 2, 3 and 4 are the same like all classes under 'array_ops' family use, see
+--select f.opfmethod, f.opfname, ap.amprocnum, ap.amproc from pg_amproc ap join pg_opfamily f on (f.oid=ap.amprocfamily) where f.opfmethod=2742;
 	FUNCTION 2 pg_catalog.ginarrayextract (anyarray, internal, internal),
 	FUNCTION 3 ginqueryarrayextract (anyarray, internal, int2, internal, internal, internal, internal),
 	FUNCTION 4 ginarrayconsistent (internal, int2, anyarray, int4, internal, internal, internal, internal),
